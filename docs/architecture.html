@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive Telemetry Design</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --ink: #18181b; --muted: #52525b; --line: #71717a;
+  --border: #d4d4d8; --go: #0e7490; --go-soft: #ecfeff; --data: #1d4ed8; --data-soft: #eff6ff;
+  --ext: #6d28d9; --ext-soft: #f5f3ff; --ops: #b45309; --ops-soft: #fffbeb; --group: #a1a1aa;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c0c0e; --panel: #17171a; --ink: #f4f4f5; --muted: #a1a1aa; --line: #a1a1aa;
+    --border: #3f3f46; --go: #67e8f9; --go-soft: #0b2a30; --data: #93c5fd; --data-soft: #0f1d3a;
+    --ext: #c4b5fd; --ext-soft: #221a3a; --ops: #fcd34d; --ops-soft: #2e2208; --group: #52525b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0c0e; --panel: #17171a; --ink: #f4f4f5; --muted: #a1a1aa; --line: #a1a1aa;
+  --border: #3f3f46; --go: #67e8f9; --go-soft: #0b2a30; --data: #93c5fd; --data-soft: #0f1d3a;
+  --ext: #c4b5fd; --ext-soft: #221a3a; --ops: #fcd34d; --ops-soft: #2e2208; --group: #52525b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1160px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { margin: 0 0 4px; font-size: 28px; }
+h2 { margin: 40px 0 12px; font-size: 19px; }
+p.lead { margin: 0; color: var(--muted); max-width: 760px; }
+.figure { margin-top: 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px; overflow-x: auto; }
+.figure svg { display: block; min-width: 900px; width: 100%; height: auto; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1.5px solid currentColor; }
+.lg-go { color: var(--go); } .lg-data { color: var(--data); } .lg-ext { color: var(--ext); } .lg-ops { color: var(--ops); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+.card h3 { margin: 0 0 8px; font-size: 15px; }
+.card ul, .card ol { margin: 0; padding-left: 20px; }
+.card li { margin: 4px 0; }
+.muted { color: var(--muted); }
+pre { margin: 0; font: 13px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace; white-space: pre; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+
+/* SVG */
+.box { stroke-width: 1.6; }
+.go { fill: var(--go-soft); stroke: var(--go); }
+.data { fill: var(--data-soft); stroke: var(--data); }
+.ext { fill: var(--ext-soft); stroke: var(--ext); }
+.ops { fill: var(--ops-soft); stroke: var(--ops); }
+.t { fill: var(--ink); font: 600 15px system-ui, sans-serif; }
+.s { fill: var(--muted); font: 12px system-ui, sans-serif; }
+.m { fill: var(--muted); font: 12px ui-monospace, Consolas, monospace; }
+.lbl { fill: var(--muted); font: 11px system-ui, sans-serif; }
+.sec { fill: var(--muted); font: 600 12px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.edge { stroke: var(--line); stroke-width: 1.5; fill: none; }
+.dash { stroke-dasharray: 5 4; }
+.group { fill: none; stroke: var(--group); stroke-width: 1.3; stroke-dasharray: 6 5; }
+.head { fill: var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>hive-telemetry</h1>
+  <p class="lead">A personal Go project: IoT readings from hive scales and weather stations, ingested over MQTT, stored in PostgreSQL, aggregated by background jobs, exported for analytics, and shipped through a CI/CD pipeline.</p>
+
+  <div class="figure">
+    <svg viewBox="0 0 1100 720" role="img" aria-labelledby="dg-title dg-desc">
+      <title id="dg-title">hive-telemetry architecture</title>
+      <desc id="dg-desc">A sensor simulator publishes readings over MQTT to Mosquitto. A Go ingestor subscribes, validates and upserts them into PostgreSQL. A Go API generated from an OpenAPI spec serves them to a small web page. A River worker computes hourly averages and exports Parquet files that DuckDB queries. All Go services send traces to Jaeger. GitHub Actions lints, tests, builds and deploys to a Linux VM or a Kubernetes cluster.</desc>
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path class="head" d="M0,0 L10,5 L0,10 z"/>
+        </marker>
+      </defs>
+
+      <!-- Go module group -->
+      <rect class="group" x="440" y="14" width="220" height="420" rx="14"/>
+      <text class="sec" x="450" y="34">Go · OpenTelemetry</text>
+
+      <!-- Row 1: web + API -->
+      <rect class="box ext" x="250" y="50" width="160" height="80" rx="10"/>
+      <text class="t" x="330" y="83" text-anchor="middle">Web page</text>
+      <text class="s" x="330" y="103" text-anchor="middle">HTML · CSS · JS</text>
+
+      <rect class="box go" x="460" y="50" width="180" height="80" rx="10"/>
+      <text class="t" x="550" y="77" text-anchor="middle">API</text>
+      <text class="m" x="550" y="96" text-anchor="middle">cmd/api</text>
+      <text class="s" x="550" y="114" text-anchor="middle">openapi.yaml → ogen</text>
+
+      <!-- Row 2: sensors → broker → ingestor -->
+      <rect class="box ext" x="20" y="190" width="180" height="80" rx="10"/>
+      <text class="t" x="110" y="217" text-anchor="middle">Sensor simulator</text>
+      <text class="m" x="110" y="236" text-anchor="middle">cmd/simulator</text>
+      <text class="s" x="110" y="254" text-anchor="middle">hive scales, weather station</text>
+
+      <rect class="box ext" x="250" y="190" width="160" height="80" rx="10"/>
+      <text class="t" x="330" y="223" text-anchor="middle">Mosquitto</text>
+      <text class="s" x="330" y="243" text-anchor="middle">MQTT broker</text>
+
+      <rect class="box go" x="460" y="190" width="180" height="80" rx="10"/>
+      <text class="t" x="550" y="217" text-anchor="middle">Ingestor</text>
+      <text class="m" x="550" y="236" text-anchor="middle">cmd/ingest</text>
+      <text class="s" x="550" y="254" text-anchor="middle">validate · dedupe · upsert</text>
+
+      <!-- Row 3: worker -->
+      <rect class="box go" x="460" y="330" width="180" height="80" rx="10"/>
+      <text class="t" x="550" y="357" text-anchor="middle">Worker</text>
+      <text class="m" x="550" y="376" text-anchor="middle">cmd/worker</text>
+      <text class="s" x="550" y="394" text-anchor="middle">River jobs</text>
+
+      <!-- PostgreSQL -->
+      <rect class="box data" x="700" y="14" width="180" height="420" rx="10"/>
+      <text class="t" x="790" y="44" text-anchor="middle">PostgreSQL</text>
+      <text class="s" x="790" y="63" text-anchor="middle">OLTP</text>
+      <text class="m" x="722" y="110">devices</text>
+      <text class="m" x="722" y="140">readings</text>
+      <text class="m" x="736" y="160">observed_at</text>
+      <text class="m" x="736" y="180">received_at</text>
+      <text class="m" x="736" y="200">unique(device,</text>
+      <text class="m" x="744" y="218">observed_at)</text>
+      <text class="m" x="722" y="260">hourly_avg</text>
+      <text class="m" x="722" y="300">river_job</text>
+      <text class="s" x="722" y="320">SKIP LOCKED queue</text>
+      <text class="m" x="722" y="360">migrations</text>
+
+      <!-- Analytics -->
+      <rect class="box data" x="460" y="480" width="180" height="70" rx="10"/>
+      <text class="t" x="550" y="510" text-anchor="middle">Parquet files</text>
+      <text class="s" x="550" y="530" text-anchor="middle">one file per day</text>
+
+      <rect class="box data" x="700" y="480" width="180" height="70" rx="10"/>
+      <text class="t" x="790" y="510" text-anchor="middle">DuckDB</text>
+      <text class="s" x="790" y="530" text-anchor="middle">OLAP · ad-hoc analytics</text>
+
+      <!-- Observability -->
+      <rect class="box ops" x="20" y="480" width="180" height="70" rx="10"/>
+      <text class="t" x="110" y="510" text-anchor="middle">Jaeger</text>
+      <text class="s" x="110" y="530" text-anchor="middle">traces, viewed in the UI</text>
+
+      <!-- Runs on -->
+      <text class="sec" x="930" y="34">Runs on</text>
+      <rect class="box ops" x="930" y="50" width="150" height="80" rx="10"/>
+      <text class="t" x="1005" y="83" text-anchor="middle">Linux VM</text>
+      <text class="s" x="1005" y="103" text-anchor="middle">docker compose</text>
+      <rect class="box ops" x="930" y="150" width="150" height="100" rx="10"/>
+      <text class="t" x="1005" y="182" text-anchor="middle">Kubernetes</text>
+      <text class="s" x="1005" y="202" text-anchor="middle">local kind cluster</text>
+      <text class="s" x="1005" y="220" text-anchor="middle">Deployment, Service,</text>
+      <text class="s" x="1005" y="236" text-anchor="middle">ConfigMap</text>
+
+      <!-- Edges -->
+      <line class="edge" x1="410" y1="90" x2="458" y2="90" marker-end="url(#arrow)"/>
+      <text class="lbl" x="424" y="82" text-anchor="middle">HTTP</text>
+
+      <line class="edge" x1="640" y1="90" x2="698" y2="90" marker-end="url(#arrow)"/>
+      <text class="lbl" x="681" y="82" text-anchor="middle">pgx</text>
+
+      <line class="edge" x1="200" y1="230" x2="248" y2="230" marker-end="url(#arrow)"/>
+      <text class="lbl" x="224" y="222" text-anchor="middle">pub</text>
+
+      <line class="edge" x1="410" y1="230" x2="458" y2="230" marker-end="url(#arrow)"/>
+      <text class="lbl" x="424" y="222" text-anchor="middle">sub</text>
+
+      <line class="edge" x1="640" y1="230" x2="698" y2="230" marker-end="url(#arrow)"/>
+      <text class="lbl" x="681" y="222" text-anchor="middle">upsert</text>
+
+      <line class="edge" x1="642" y1="370" x2="698" y2="370" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+      <text class="lbl" x="681" y="362" text-anchor="middle">jobs</text>
+
+      <line class="edge" x1="550" y1="410" x2="550" y2="478" marker-end="url(#arrow)"/>
+      <text class="lbl" x="558" y="450">nightly export</text>
+
+      <line class="edge" x1="640" y1="515" x2="698" y2="515" marker-end="url(#arrow)"/>
+      <text class="lbl" x="669" y="507" text-anchor="middle">reads</text>
+
+      <path class="edge dash" d="M440 400 H110 V478" marker-end="url(#arrow)"/>
+      <text class="lbl" x="280" y="392" text-anchor="middle">OTLP traces from every Go service</text>
+
+      <!-- CI/CD band -->
+      <text class="sec" x="20" y="612">CI/CD · GitHub Actions</text>
+      <g>
+        <rect class="box ops" x="20"  y="626" width="160" height="70" rx="10"/>
+        <text class="t" x="100" y="657" text-anchor="middle">git push</text>
+        <text class="s" x="100" y="677" text-anchor="middle">pull request / main</text>
+
+        <rect class="box ops" x="204" y="626" width="160" height="70" rx="10"/>
+        <text class="t" x="284" y="657" text-anchor="middle">golangci-lint</text>
+        <text class="s" x="284" y="677" text-anchor="middle">+ generate &amp; diff</text>
+
+        <rect class="box ops" x="388" y="626" width="160" height="70" rx="10"/>
+        <text class="t" x="468" y="657" text-anchor="middle">go test -race</text>
+        <text class="s" x="468" y="677" text-anchor="middle">real Postgres service</text>
+
+        <rect class="box ops" x="572" y="626" width="160" height="70" rx="10"/>
+        <text class="t" x="652" y="657" text-anchor="middle">docker build</text>
+        <text class="s" x="652" y="677" text-anchor="middle">multi-stage, static binary</text>
+
+        <rect class="box ops" x="756" y="626" width="150" height="70" rx="10"/>
+        <text class="t" x="831" y="657" text-anchor="middle">push to GHCR</text>
+        <text class="s" x="831" y="677" text-anchor="middle">tag = commit SHA</text>
+
+        <rect class="box ops" x="930" y="626" width="150" height="70" rx="10"/>
+        <text class="t" x="1005" y="657" text-anchor="middle">deploy</text>
+        <text class="s" x="1005" y="677" text-anchor="middle">same image, VM or k8s</text>
+
+        <line class="edge" x1="180" y1="661" x2="202" y2="661" marker-end="url(#arrow)"/>
+        <line class="edge" x1="364" y1="661" x2="386" y2="661" marker-end="url(#arrow)"/>
+        <line class="edge" x1="548" y1="661" x2="570" y2="661" marker-end="url(#arrow)"/>
+        <line class="edge" x1="732" y1="661" x2="754" y2="661" marker-end="url(#arrow)"/>
+        <line class="edge" x1="906" y1="661" x2="928" y2="661" marker-end="url(#arrow)"/>
+      </g>
+    </svg>
+    <div class="legend">
+      <span class="lg-go">Go services (one module)</span>
+      <span class="lg-data">Data stores</span>
+      <span class="lg-ext">Outside the Go services</span>
+      <span class="lg-ops">Operations and delivery</span>
+    </div>
+  </div>
+
+  <h2>How a reading flows</h2>
+  <div class="card">
+    <ol>
+      <li>The simulator publishes a JSON reading to <code>hives/{id}/weight</code> or <code>stations/{id}/weather</code>. Field names follow the Smart Data Models <code>WeatherObserved</code> shape.</li>
+      <li>The ingestor subscribes, validates the payload, and upserts it keyed by device and <code>observed_at</code>. MQTT QoS 1 can deliver a message twice, so the write has to be idempotent.</li>
+      <li>Every hour a River job computes averages into <code>hourly_avg</code>. River takes jobs with <code>SELECT … FOR UPDATE SKIP LOCKED</code>, so two workers never run the same job.</li>
+      <li>Every night a River job writes the previous day to a Parquet file. DuckDB queries those files for analytics without touching the OLTP database.</li>
+      <li>The API serves readings and summaries over endpoints generated from <code>openapi.yaml</code>. The web page calls the API.</li>
+      <li>Each step is traced with OpenTelemetry, so one reading can be followed from MQTT to the database in Jaeger.</li>
+    </ol>
+  </div>
+
+  <div class="grid" style="margin-top:16px">
+    <div class="card">
+      <h3>Repo layout</h3>
+<pre>hive-telemetry/
+├─ api/openapi.yaml
+├─ cmd/
+│  ├─ api/        main.go
+│  ├─ ingest/     main.go
+│  ├─ worker/     main.go
+│  └─ simulator/  main.go
+├─ internal/
+│  ├─ gen/api/    ogen output
+│  ├─ ingest/     MQTT → validate → store
+│  ├─ store/      pgx queries
+│  ├─ jobs/       River workers
+│  └─ telemetry/  OpenTelemetry setup
+├─ migrations/
+├─ web/           index.html, app.js, style.css
+├─ deploy/
+│  ├─ compose.yaml
+│  └─ k8s/
+├─ .golangci.yml
+└─ .github/workflows/ci.yml</pre>
+    </div>
+    <div class="card">
+      <h3>Build order, about 7 sessions</h3>
+      <ol>
+        <li><b>Go basics.</b> Interfaces, errors, context, goroutines, errgroup. Small exercises.</li>
+        <li><b>API + Postgres.</b> openapi.yaml, ogen, pgx, migrations, graceful shutdown.</li>
+        <li><b>MQTT ingestion.</b> Mosquitto in compose, simulator, idempotent upsert.</li>
+        <li><b>Jobs + analytics.</b> River hourly averages, nightly Parquet export, DuckDB.</li>
+        <li><b>Observability.</b> OpenTelemetry for HTTP, pgx and River, Jaeger, slog with trace IDs.</li>
+        <li><b>Quality + CI/CD.</b> golangci-lint, table-driven and integration tests, Actions, GHCR.</li>
+        <li><b>Kubernetes + web page.</b> kind, manifests, the HTML/JS page.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Out of scope for now</h3>
+      <ul>
+        <li>Server-rendered templates: the page is plain HTML and JS.</li>
+        <li>OIDC, passkeys, policy engines: no auth beyond an API key.</li>
+        <li>NGSI-LD context broker: only the Smart Data Models field names.</li>
+        <li>TimescaleDB: a possible experiment once plain PostgreSQL works.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+</body>
+</html>

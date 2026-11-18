@@ -1,0 +1,21 @@
+# Build output
+/bin/
+*.exe
+*.test
+*.out
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Data produced at runtime
+*.parquet
+*.duckdb
+/data/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
