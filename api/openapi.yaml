@@ -1,0 +1,202 @@
+openapi: 3.0.3
+info:
+  title: hive-telemetry API
+  version: 0.1.0
+  description: Readings from hive scales, stored in PostgreSQL.
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /hives:
+    get:
+      operationId: listHives
+      summary: List all hives
+      responses:
+        "200":
+          description: All hives, ordered by ID.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Hive"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /hives/{hiveId}/readings:
+    get:
+      operationId: listHiveReadings
+      summary: Readings of one hive in a time range
+      description: >
+        Returns readings with from <= observed_at < to, oldest first.
+        Responds 404 if the hive does not exist, and an empty array if it
+        has no readings in the range.
+      parameters:
+        - $ref: "#/components/parameters/HiveID"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: limit
+          in: query
+          description: Maximum number of readings to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 1000
+      responses:
+        "200":
+          description: Readings in the range.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reading"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /hives/{hiveId}/summary:
+    get:
+      operationId: getHiveSummary
+      summary: Weight statistics of one hive in a time range
+      description: >
+        Summarises readings with from <= observed_at < to.
+        Responds 404 if the hive does not exist.
+      parameters:
+        - $ref: "#/components/parameters/HiveID"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Summary of the range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Summary"
+        default:
+          $ref: "#/components/responses/Error"
+
+components:
+  parameters:
+    HiveID:
+      name: hiveId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    From:
+      name: from
+      in: query
+      description: Start of the range, inclusive (RFC 3339). Defaults to 24 hours before `to`.
+      schema:
+        type: string
+        format: date-time
+    To:
+      name: to
+      in: query
+      description: End of the range, exclusive (RFC 3339). Defaults to now.
+      schema:
+        type: string
+        format: date-time
+
+  schemas:
+    Hive:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+          example: hive-1
+        name:
+          type: string
+          example: Garden, left
+        created_at:
+          type: string
+          format: date-time
+
+    Reading:
+      type: object
+      required: [observed_at, received_at, weight_kg]
+      properties:
+        observed_at:
+          type: string
+          format: date-time
+          description: When the sensor took the reading.
+        received_at:
+          type: string
+          format: date-time
+          description: When the server stored the reading.
+        weight_kg:
+          type: number
+          format: double
+          example: 42.35
+        temperature_c:
+          type: number
+          format: double
+          description: Omitted when the scale has no temperature sensor.
+          example: 31.5
+
+    Summary:
+      type: object
+      required: [hive_id, from, to, count]
+      properties:
+        hive_id:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        count:
+          type: integer
+          description: Number of readings in the range.
+        weight:
+          $ref: "#/components/schemas/WeightStats"
+
+    WeightStats:
+      type: object
+      description: Omitted when the range has no readings.
+      required: [min_kg, max_kg, avg_kg, first_kg, last_kg, change_kg]
+      properties:
+        min_kg:
+          type: number
+          format: double
+        max_kg:
+          type: number
+          format: double
+        avg_kg:
+          type: number
+          format: double
+        first_kg:
+          type: number
+          format: double
+          description: Weight at the earliest reading in the range.
+        last_kg:
+          type: number
+          format: double
+          description: Weight at the latest reading in the range.
+        change_kg:
+          type: number
+          format: double
+          description: last_kg minus first_kg. Positive means the hive gained weight.
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: hive "hive-9" not found
+
+  responses:
+    Error:
+      description: Error (400 invalid input, 404 unknown hive, 500 internal error).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
