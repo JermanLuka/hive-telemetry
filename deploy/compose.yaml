@@ -1,0 +1,23 @@
+name: hive-telemetry
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive # local development only
+      POSTGRES_DB: hive
+    ports:
+      - "5432:5432"
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/<major>/,
+      # so the volume is mounted one level up.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d hive"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
