@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,6 +30,15 @@ type Reading struct {
 	ReceivedAt   time.Time // server time
 	WeightKg     float64
 	TemperatureC *float64 // nil when the scale has no temperature sensor
+}
+
+// NewReading is a reading as it arrives from a hive, before it is stored.
+// The database sets ReceivedAt when it stores it.
+type NewReading struct {
+	HiveID       string
+	ObservedAt   time.Time
+	WeightKg     float64
+	TemperatureC *float64
 }
 
 // Summary describes a hive's readings over a time range.
@@ -153,6 +163,29 @@ func (s *Store) Summary(ctx context.Context, hiveID string, from, to time.Time) 
 		}
 	}
 	return sum, nil
+}
+
+// foreignKeyViolation is the Postgres error code for a row that refers to a
+// missing row in another table, here a reading for an unknown hive.
+const foreignKeyViolation = "23503"
+
+// InsertReading stores r and reports whether it was new. A reading with the
+// same hive and observed_at already stored is left as it is and reported as
+// not inserted, so delivering the same message twice is harmless.
+func (s *Store) InsertReading(ctx context.Context, r NewReading) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO hive_readings (hive_id, observed_at, weight_kg, temperature_c)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (hive_id, observed_at) DO NOTHING`,
+		r.HiveID, r.ObservedAt, r.WeightKg, r.TemperatureC)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+			return false, fmt.Errorf("hive %q: %w", r.HiveID, ErrNotFound)
+		}
+		return false, fmt.Errorf("insert reading: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // ensureHive returns ErrNotFound if no hive has the given ID. It lets
