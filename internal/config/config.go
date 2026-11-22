@@ -7,6 +7,7 @@ import "os"
 type Config struct {
 	DatabaseURL string
 	HTTPAddr    string
+	MQTTURL     string
 }
 
 // Load reads the configuration from the environment, falling back to
@@ -15,6 +16,7 @@ func Load() Config {
 	return Config{
 		DatabaseURL: getenv("DATABASE_URL", "postgres://hive:hive@localhost:5432/hive?sslmode=disable"),
 		HTTPAddr:    getenv("HTTP_ADDR", ":8080"),
+		MQTTURL:     getenv("MQTT_URL", "tcp://localhost:1883"),
 	}
 }
 
