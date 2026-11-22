@@ -2,7 +2,10 @@
 // each hive writes to and the JSON payload of a reading.
 package telemetry
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // QoS is the MQTT quality of service for readings. Level 1 means "at least
 // once": the broker retries until the message is acknowledged, so a reading
@@ -14,6 +17,24 @@ const QoS byte = 1
 // authorise per hive.
 func ReadingTopic(hiveID string) string {
 	return "hives/" + hiveID + "/readings"
+}
+
+// ReadingSubscription matches the reading topic of every hive; "+" is the
+// MQTT wildcard for exactly one topic level.
+const ReadingSubscription = "hives/+/readings"
+
+// HiveIDFromTopic returns the hive ID in a reading topic. It reports false
+// if the topic is not of the form hives/{hiveID}/readings.
+func HiveIDFromTopic(topic string) (string, bool) {
+	rest, ok := strings.CutPrefix(topic, "hives/")
+	if !ok {
+		return "", false
+	}
+	id, ok := strings.CutSuffix(rest, "/readings")
+	if !ok || id == "" || strings.Contains(id, "/") {
+		return "", false
+	}
+	return id, true
 }
 
 // Reading is one measurement from a hive's scale and sensors.
