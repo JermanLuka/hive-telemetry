@@ -127,7 +127,7 @@ func (s *Hive) encodeFields(e *jx.Encoder) {
 	}
 	{
 		e.FieldStart("created_at")
-		json.EncodeDateTime(e, s.CreatedAt)
+		json.EncodeTimeFormat(e, s.CreatedAt, "2006-01-02T15:04:05.999999Z07:00")
 	}
 }
 
@@ -173,7 +173,7 @@ func (s *Hive) Decode(d *jx.Decoder) error {
 		case "created_at":
 			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
-				v, err := json.DecodeDateTime(d)
+				v, err := json.DecodeTimeFormat(d, "2006-01-02T15:04:05.999999Z07:00")
 				s.CreatedAt = v
 				if err != nil {
 					return err
@@ -317,11 +317,11 @@ func (s *Reading) Encode(e *jx.Encoder) {
 func (s *Reading) encodeFields(e *jx.Encoder) {
 	{
 		e.FieldStart("observed_at")
-		json.EncodeDateTime(e, s.ObservedAt)
+		json.EncodeTimeFormat(e, s.ObservedAt, "2006-01-02T15:04:05.999999Z07:00")
 	}
 	{
 		e.FieldStart("received_at")
-		json.EncodeDateTime(e, s.ReceivedAt)
+		json.EncodeTimeFormat(e, s.ReceivedAt, "2006-01-02T15:04:05.999999Z07:00")
 	}
 	{
 		e.FieldStart("weight_kg")
@@ -354,7 +354,7 @@ func (s *Reading) Decode(d *jx.Decoder) error {
 		case "observed_at":
 			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
-				v, err := json.DecodeDateTime(d)
+				v, err := json.DecodeTimeFormat(d, "2006-01-02T15:04:05.999999Z07:00")
 				s.ObservedAt = v
 				if err != nil {
 					return err
@@ -366,7 +366,7 @@ func (s *Reading) Decode(d *jx.Decoder) error {
 		case "received_at":
 			requiredBitSet[0] |= 1 << 1
 			if err := func() error {
-				v, err := json.DecodeDateTime(d)
+				v, err := json.DecodeTimeFormat(d, "2006-01-02T15:04:05.999999Z07:00")
 				s.ReceivedAt = v
 				if err != nil {
 					return err
@@ -468,11 +468,11 @@ func (s *Summary) encodeFields(e *jx.Encoder) {
 	}
 	{
 		e.FieldStart("from")
-		json.EncodeDateTime(e, s.From)
+		json.EncodeTimeFormat(e, s.From, "2006-01-02T15:04:05.999999Z07:00")
 	}
 	{
 		e.FieldStart("to")
-		json.EncodeDateTime(e, s.To)
+		json.EncodeTimeFormat(e, s.To, "2006-01-02T15:04:05.999999Z07:00")
 	}
 	{
 		e.FieldStart("count")
@@ -518,7 +518,7 @@ func (s *Summary) Decode(d *jx.Decoder) error {
 		case "from":
 			requiredBitSet[0] |= 1 << 1
 			if err := func() error {
-				v, err := json.DecodeDateTime(d)
+				v, err := json.DecodeTimeFormat(d, "2006-01-02T15:04:05.999999Z07:00")
 				s.From = v
 				if err != nil {
 					return err
@@ -530,7 +530,7 @@ func (s *Summary) Decode(d *jx.Decoder) error {
 		case "to":
 			requiredBitSet[0] |= 1 << 2
 			if err := func() error {
-				v, err := json.DecodeDateTime(d)
+				v, err := json.DecodeTimeFormat(d, "2006-01-02T15:04:05.999999Z07:00")
 				s.To = v
 				if err != nil {
 					return err
