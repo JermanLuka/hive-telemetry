@@ -103,6 +103,9 @@ components:
         type: string
         format: date-time
 
+  # Response times use RFC 3339 with up to microsecond precision, the
+  # resolution Postgres stores. Without x-ogen-time-format, ogen drops the
+  # fractional seconds.
   schemas:
     Hive:
       type: object
@@ -117,6 +120,7 @@ components:
         created_at:
           type: string
           format: date-time
+          x-ogen-time-format: 2006-01-02T15:04:05.999999Z07:00
 
     Reading:
       type: object
@@ -125,10 +129,12 @@ components:
         observed_at:
           type: string
           format: date-time
+          x-ogen-time-format: 2006-01-02T15:04:05.999999Z07:00
           description: When the sensor took the reading.
         received_at:
           type: string
           format: date-time
+          x-ogen-time-format: 2006-01-02T15:04:05.999999Z07:00
           description: When the server stored the reading.
         weight_kg:
           type: number
@@ -149,9 +155,11 @@ components:
         from:
           type: string
           format: date-time
+          x-ogen-time-format: 2006-01-02T15:04:05.999999Z07:00
         to:
           type: string
           format: date-time
+          x-ogen-time-format: 2006-01-02T15:04:05.999999Z07:00
         count:
           type: integer
           description: Number of readings in the range.

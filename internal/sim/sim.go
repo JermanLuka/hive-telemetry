@@ -36,8 +36,8 @@ func (h *Hive) Next(t time.Time, step time.Duration) telemetry.Reading {
 	h.weight += gainPerHour(t.Hour())*step.Hours() + h.rng.NormFloat64()*0.01
 
 	r := telemetry.Reading{
-		ObservedAt: t.UTC().Truncate(time.Second), // the API reports whole seconds
-		WeightKg:   round(h.weight, 2),            // scales report in 10 g steps
+		ObservedAt: t.UTC().Truncate(time.Millisecond),
+		WeightKg:   round(h.weight, 2), // scales report in 10 g steps
 	}
 	if h.hasTemp {
 		// The brood nest is held near 34.5 °C, with a small daily swing.
